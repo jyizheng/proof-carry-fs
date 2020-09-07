@@ -1,0 +1,359 @@
+%%
+(*
+Copyright (c) <2008,2009> <Deepak Garg dg@cs.cmu.edu>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*)
+
+%name BL (* Binder Logic *)
+
+%pos int * int	
+	(* linenum * linepos *)
+
+%term (* Declarations *)
+      SORT_LIT | DOT | TERM_LIT | RARROW | COLON | CONSTRAINT_LIT | PRED_LIT | STATE_LIT
+      (* Pre-defined sorts *)
+    | ANY | PRINCIPAL | TIME | EXP | FILE | PERM | STR | INT | DATE 
+      (* Terms *)
+    | PRIM_INT of int | PRIM_STR of string | PRIM_DATE of Time.time
+    | LOCA | CTIME | NINFTY | PINFTY | PRIM_STR2FILE | PRIM_DATE2TIME
+    | PRIM_INT2TIME | PRIM_INT2PRINCIPAL | READ | WRITE | EXECUTE 
+    | IDENTITY | GOVERN | TIME2EXP | EXP_ADD | EXP_SUBTRACT | EXP_MAX | EXP_MIN 
+      (* Constraints *)
+    | LEQ | STRONGER 
+      (* State predicates *)
+    | OWNER | HAS_XATTR
+      (* Logical formulas *)
+    | IS | ATOM | CONJ | DISJ | IMP | TOP | BOT | AT | SAYS | FORALL | EXISTS 
+    | CINJ | SINJ
+      (* Hypothesis *)
+    | HYP_TRUE | HYP_CLAIMS
+      (* Proof terms *)
+    | PF_CONJI | PF_CONJE1 | PF_CONJE2 | PF_DISJI1 | PF_DISJI2 | PF_DISJE
+    | PF_IMPI | PF_IMPE | PF_TOPI | PF_BOTE | PF_ATI | PF_ATE | PF_SAYSI | PF_SAYSE
+    | PF_FORALLI | PF_FORALLE | PF_EXISTSI | PF_EXISTSE 
+    | PF_CINJI | PF_CINJE | PF_SINJI | PF_SINJE
+    | PF_SYNTH2CHECK | PF_HYP | PF_IS
+      (* General *)
+    | LP | RP | LSQ | RSQ | ID of string
+      (* Marker *)
+    | START_DECLARATIONS | START_PROP | START_PROOFTERM | START_PROOF | START_PROGRAM | 
+      START_TERM | START_CONSTRAINT | START_QPROCAP | START_SUBSTITUTION
+    | HYPCONSTRAINT_ | HYPCONSTRAINT_NIL | HYPCONSTRAINT_CONS | CONSTRAINT_NIL | 
+      CONSTRAINT_CONS | MAC of string | STATE_CONS | STATE_NIL 
+    | PROCAP_LIT | PARAMETERS_LIT | QHCL_BASE | QHCL_ALL
+    | EOFMARK
+
+%nonterm PROP of Props.prop 
+       | TERM of Terms.term
+       | TERMLIST of Terms.term list
+       | PROOF of Proofs.pfn
+       | TERMARG of Terms.term
+       | TERMUNARY of Terms.term
+       | TERMWITHARGS of string * Terms.term list
+       | START of ParserCommon.parserResult
+       | PROPUNARY of Props.prop
+       | PROPARG of Props.prop
+       | PREDWITHARGS of Props.pred * Terms.term list
+       | PREDUNARY of Props.pred * Terms.term list
+       | PRED of Props.pred * Terms.term list
+       | PREDARG of Props.pred * Terms.term list
+       | SORT of Sorts.sort
+       | PROGRAM of Proofs.ctx      
+       | STATEARG of States.state
+       | STATE of States.state
+       | STATEUNARY of States.state
+       | STATEWITHARGS of string * Terms.term list
+       | CONSTRAINT of Constraints.constraint
+       | CONSTRAINTUNARY of Constraints.constraint
+       | CONSTRAINTARG of Constraints.constraint
+       | CONSTRAINTWITHARGS of string * Terms.term list
+       | PFN of Proofs.pfn 
+	 (* Normal proofs *)
+       | PFNUNARY of Proofs.pfn
+       | PFNARG of Proofs.pfn
+       | PFR of Proofs.pfr
+	 (* Neutral proofs *)
+       | PFRARG of Proofs.pfr
+       | DECLS of Declarations.decls
+       | DECL of Declarations.decl
+       | SORTLIST of Sorts.sort list
+       | PROCAP of Procaps.procap
+       | QPROCAP of Procaps.qprocap_parsed
+       | STATELIST of States.state list
+       | STATELISTARG of States.state list
+       | CONSTRAINTLIST of Constraints.constraint list
+       | CONSTRAINTLISTARG of Constraints.constraint list
+       | HYPCONSTRAINT of Constraints.hypconstraint
+       | HYPCONSTRAINTARG of Constraints.hypconstraint
+       | HYPCONSTRAINTLIST of Constraints.hypconstraint list
+       | HYPCONSTRAINTLISTARG of Constraints.hypconstraint list
+       | PARAMS of (Terms.varbind * Sorts.sort) list
+	 (* Parameters of a qprocap *)
+       | PARAM_LIST of (Terms.varbind * Sorts.sort) list
+       | QHCL of (Procaps.qhcl)
+       | QHCLARG of (Procaps.qhcl)
+       | QHCL_PROCESSED of (Procaps.qhcl)
+       | SUBSTITUTION of Procaps.substitution
+
+%noshift EOFMARK
+%eop EOFMARK
+%pure
+%nodefault
+%start START
+%verbose
+
+%%
+
+START: START_PROP PROP (ParserCommon.Prop (ParserCommon.transform_prop_bvs  PROP))
+     | START_PROGRAM PROGRAM (ParserCommon.Program PROGRAM)
+     | START_TERM TERM (ParserCommon.Term TERM)
+     | START_CONSTRAINT CONSTRAINT (ParserCommon.Constraint CONSTRAINT)
+     | START_PROOFTERM PFN (ParserCommon.Proofterm (ParserCommon.transform_pfn_bvs PFN))
+     | START_DECLARATIONS DECLS (ParserCommon.Declarations DECLS)
+     | START_QPROCAP QPROCAP (ParserCommon.Qprocap QPROCAP)
+     | START_SUBSTITUTION SUBSTITUTION (ParserCommon.Substitution SUBSTITUTION)
+
+(* A program is a list of clauses with names. Each clause ends in a "." *)
+PROGRAM: ([])
+       | ID COLON HYP_TRUE PROPARG TERMARG TERMARG DOT PROGRAM 
+		(Proofs.hyp_true ([], Proofs.pf_hyp (Proofs.Pfvar_external ID),
+				  ParserCommon.transform_prop_bvs PROPARG,
+				  TERMARG1, TERMARG2) 
+		 :: PROGRAM)
+
+       | ID COLON HYP_CLAIMS TERMARG PROPARG TERMARG TERMARG DOT PROGRAM 
+		(Proofs.hyp_claims ([], Proofs.pf_hyp (Proofs.Pfvar_external ID),
+				    TERMARG1,
+				    ParserCommon.transform_prop_bvs PROPARG,
+				    TERMARG2, TERMARG3) 
+		 :: PROGRAM)
+
+PROP: PROPUNARY (PROPUNARY)
+    | ATOM PREDARG (Props.p_atomic (PREDARG))
+    | CONJ PROPARG PROPARG (Props.p_conj (PROPARG1, PROPARG2))
+    | DISJ PROPARG PROPARG (Props.p_disj (PROPARG1, PROPARG2))
+    | IMP PROPARG PROPARG (Props.p_imp (PROPARG1, PROPARG2))
+    | FORALL SORT LP LSQ ID RSQ PROP RP (Props.p_forall (SORT, Terms.Varbind(ID), PROP))
+    | EXISTS SORT LP LSQ ID RSQ PROP RP (Props.p_exists (SORT, Terms.Varbind(ID), PROP))
+    | IS TERMARG TERMARG (Props.p_is (TERMARG1, TERMARG2))
+    | CINJ CONSTRAINTARG (Props.p_cinj (CONSTRAINTARG))
+    | SINJ STATEARG (Props.p_sinj (STATEARG))
+    | SAYS TERMARG PROPARG (Props.p_says (TERMARG, PROPARG))
+    | AT PROPARG TERMARG TERMARG (Props.p_at(PROPARG, TERMARG1, TERMARG2))
+    | LP PROP RP (PROP)
+	 
+PROPUNARY: TOP (Props.p_top)
+	 | BOT (Props.p_bot)
+
+PROPARG: PROPUNARY (PROPUNARY)
+       | LP PROP RP (PROP)
+
+PREDARG: PREDUNARY (PREDUNARY)
+       | LP PRED RP (PRED)
+
+PREDUNARY: ID ((ID, []))
+
+PRED: PREDUNARY (PREDUNARY)
+    | LP PRED RP (PRED)
+    | PREDWITHARGS (PREDWITHARGS)
+
+PREDWITHARGS: ID TERMARG ((ID, [TERMARG]))
+	    | PREDWITHARGS TERMARG (let val (p, tl) = PREDWITHARGS in (p, tl @ [TERMARG]) end)
+
+
+STATEARG: STATEUNARY (STATEUNARY)
+	| LP STATE RP (STATE)
+
+STATE: STATEUNARY (STATEUNARY)
+     | OWNER TERMARG TERMARG (States.s_owner (TERMARG1, TERMARG2))
+     | HAS_XATTR TERMARG TERMARG TERMARG (States.s_has_xattr(TERMARG1, TERMARG2, TERMARG3))
+     | STATEWITHARGS (States.s_other (STATEWITHARGS))
+     | LP STATE RP (STATE)
+
+STATEUNARY: ID (States.s_other (ID, []))
+
+STATEWITHARGS: ID TERMARG ((ID, [TERMARG]))
+	     | STATEWITHARGS TERMARG (let val (s, tl) = STATEWITHARGS in (s, tl @ [TERMARG]) end) 
+
+CONSTRAINTARG: CONSTRAINTUNARY (CONSTRAINTUNARY)
+	     | LP CONSTRAINT RP (CONSTRAINT)
+
+CONSTRAINT: CONSTRAINTUNARY (CONSTRAINTUNARY)
+	  | LEQ TERMARG TERMARG (Constraints.c_leq (TERMARG1, TERMARG2))
+	  | STRONGER TERMARG TERMARG (Constraints.c_stronger (TERMARG1, TERMARG2))
+	  | CONSTRAINTWITHARGS (Constraints.c_other (CONSTRAINTWITHARGS))
+	  | LP CONSTRAINT RP (CONSTRAINT)
+
+CONSTRAINTUNARY: ID (Constraints.c_other (ID, []))
+
+CONSTRAINTWITHARGS: ID TERMARG ((ID, [TERMARG]))
+		  | CONSTRAINTWITHARGS TERMARG (let val (c, tl) = CONSTRAINTWITHARGS in (c, tl @ [TERMARG]) end)
+
+
+TERM: PRIM_STR2FILE TERMARG (Terms.Prim_str2file (TERMARG))
+    | PRIM_DATE2TIME TERMARG (Terms.Prim_date2time (TERMARG))
+    | PRIM_INT2TIME TERMARG (Terms.Prim_int2time (TERMARG))
+    | PRIM_INT2PRINCIPAL TERMARG (Terms.Prim_int2principal (TERMARG))
+    | TIME2EXP TERMARG (Terms.Time2exp (TERMARG))
+    | EXP_ADD TERMARG TERMARG (Terms.Exp_add (TERMARG1, TERMARG2))
+    | EXP_SUBTRACT TERMARG TERMARG (Terms.Exp_subtract (TERMARG1, TERMARG2))
+    | EXP_MAX TERMARG TERMARG (Terms.Exp_max (TERMARG1, TERMARG2))
+    | EXP_MIN TERMARG TERMARG (Terms.Exp_min (TERMARG1, TERMARG2))
+    | TERMUNARY (TERMUNARY)
+    | TERMWITHARGS (Terms.Appl (TERMWITHARGS))
+    | LP TERM RP (TERM)
+
+TERMARG: TERMUNARY (TERMUNARY)
+       | LP TERM RP (TERM)
+
+TERMUNARY: LOCA (Terms.Loca)
+	 | CTIME (Terms.Ctime)
+	 | NINFTY (Terms.Ninfty)
+	 | PINFTY (Terms.Pinfty)
+	 | READ (Terms.Read)
+	 | WRITE (Terms.Write)
+	 | EXECUTE (Terms.Execute)
+	 | IDENTITY (Terms.Identity)
+	 | GOVERN (Terms.Govern)
+	 | PRIM_STR (Terms.Prim_str (PRIM_STR))
+	 | PRIM_INT (Terms.Prim_int (PRIM_INT))
+	 | PRIM_DATE (Terms.Prim_date (PRIM_DATE))
+	 | ID (Terms.Appl (ID, []))
+
+TERMWITHARGS: ID TERMARG ((ID, [TERMARG]))
+	    | TERMWITHARGS TERMARG (let val (f, tl) = TERMWITHARGS in (f, tl@[TERMARG]) end)
+
+
+SORT: ANY (Sorts.Sort_any)
+    | PRINCIPAL (Sorts.Sort_principal)
+    | TIME (Sorts.Sort_time)
+    | EXP (Sorts.Sort_exp)
+    | FILE (Sorts.Sort_file)
+    | PERM (Sorts.Sort_perm)
+    | STR (Sorts.Sort_str)
+    | INT (Sorts.Sort_int)
+    | DATE (Sorts.Sort_date)
+    | ID (Sorts.Sort_other ID)
+    | LP SORT RP (SORT)
+
+
+PFN: PF_CONJI PFNARG PFNARG (Proofs.pf_conjI (PFNARG1, PFNARG2))
+   | PF_IMPI LP LSQ ID RSQ LSQ ID RSQ LSQ ID RSQ PFN RP
+		(Proofs.pf_impI (Terms.Bvar ID1, Terms.Bvar ID2, Proofs.Pfvar_external ID3, PFN))
+   | PF_DISJI1 PFNARG (Proofs.pf_disjI1 PFNARG)
+   | PF_DISJI2 PFNARG (Proofs.pf_disjI2 PFNARG)
+   | PF_DISJE PFRARG LP LSQ ID RSQ PFN RP LP LSQ ID RSQ PFN RP
+		(Proofs.pf_disjE (PFRARG, (Proofs.Pfvar_external ID1, PFN1), (Proofs.Pfvar_external ID2, PFN2)))
+   | PF_BOTE PFRARG (Proofs.pf_botE PFRARG)
+   | PF_FORALLI LP LSQ ID RSQ PFN RP (Proofs.pf_forallI (Terms.Bvar ID, PFN))
+   | PF_EXISTSI TERMARG PFNARG (Proofs.pf_existsI (TERMARG, PFNARG))
+   | PF_EXISTSE PFRARG LP LSQ ID RSQ LSQ ID RSQ PFN RP 
+		(Proofs.pf_existsE(PFRARG, (Terms.Bvar ID1, Proofs.Pfvar_external ID2, PFN)))
+   | PF_SYNTH2CHECK PFRARG (Proofs.pf_synth2check PFRARG)
+   | PF_CINJE PFRARG PFNARG (Proofs.pf_cinjE(PFRARG,PFNARG))
+   | PF_SINJE PFRARG PFNARG (Proofs.pf_sinjE(PFRARG,PFNARG))
+   | PF_SAYSI PFNARG (Proofs.pf_saysI PFNARG)
+   | PF_SAYSE PFRARG LP LSQ ID RSQ PFN RP (Proofs.pf_saysE (PFRARG, (Proofs.Pfvar_external ID, PFN)))
+   | PF_ATI PFNARG (Proofs.pf_atI PFNARG)
+   | LP PFN RP (PFN)
+   | PFNUNARY (PFNUNARY)
+
+PFNUNARY: PF_TOPI (Proofs.pf_topI)
+   | PF_IS (Proofs.pf_is)
+   | PF_CINJI (Proofs.pf_cinjI)
+   | PF_SINJI (Proofs.pf_sinjI)
+
+PFNARG: PFNUNARY (PFNUNARY)
+      | LP PFN RP (PFN)
+
+PFR: PF_HYP ID (Proofs.pf_hyp (Proofs.Pfvar_external ID))
+   | PF_IMPE PFRARG PFNARG TERMARG TERMARG (Proofs.pf_impE (PFRARG,PFNARG,TERMARG1,TERMARG2))
+   | PF_CONJE1 PFRARG (Proofs.pf_conjE1 PFRARG)
+   | PF_CONJE2 PFRARG (Proofs.pf_conjE2 PFRARG)
+   | PF_FORALLE PFRARG TERMARG (Proofs.pf_forallE (PFRARG,TERMARG))
+   | PF_ATE PFRARG (Proofs.pf_atE PFRARG)
+   | LP PFR RP (PFR)
+
+PFRARG: LP PFR RP (PFR)
+
+DECLS: ([])
+     | DECL DECLS (DECL :: DECLS)
+
+DECL: ID COLON SORT_LIT DOT (Declarations.Decl_sort ID)
+    | ID COLON SORTLIST PRED_LIT DOT (Declarations.Decl_pred (ID, SORTLIST))
+    | ID COLON SORTLIST STATE_LIT DOT (Declarations.Decl_state (ID, SORTLIST))
+    | ID COLON SORTLIST CONSTRAINT_LIT DOT (Declarations.Decl_constraint (ID, SORTLIST))
+    | ID COLON SORTLIST TERM_LIT SORT DOT (Declarations.Decl_function (ID, SORTLIST, SORT))
+
+SORTLIST: ([])
+	|  SORTLIST TERM_LIT SORT RARROW (SORTLIST @ [SORT])
+
+
+STATELIST: STATE_NIL ([])
+	 | STATE_CONS STATEARG STATELISTARG (STATEARG :: STATELISTARG)
+	 | LP STATELIST RP (STATELIST)
+
+STATELISTARG: STATE_NIL ([])
+	    | LP STATELIST RP (STATELIST)
+
+CONSTRAINTLIST: CONSTRAINT_NIL ([])
+	      | CONSTRAINT_CONS CONSTRAINTARG CONSTRAINTLISTARG (CONSTRAINTARG :: CONSTRAINTLISTARG)
+	      | LP CONSTRAINTLIST RP (CONSTRAINTLIST)
+
+CONSTRAINTLISTARG: CONSTRAINT_NIL ([])
+		 | LP CONSTRAINTLIST RP (CONSTRAINTLIST)
+
+ 
+HYPCONSTRAINT: HYPCONSTRAINT_ CONSTRAINTLISTARG CONSTRAINTARG ((Constraints.make_ctx(CONSTRAINTLISTARG), CONSTRAINTARG))
+	     | LP HYPCONSTRAINT RP (HYPCONSTRAINT)
+
+HYPCONSTRAINTARG: LP HYPCONSTRAINT RP (HYPCONSTRAINT)
+
+HYPCONSTRAINTLIST: HYPCONSTRAINT_NIL ([])
+		 | HYPCONSTRAINT_CONS HYPCONSTRAINTARG HYPCONSTRAINTLISTARG (HYPCONSTRAINTARG :: HYPCONSTRAINTLISTARG)
+		 | LP HYPCONSTRAINTLIST RP (HYPCONSTRAINTLIST)
+
+HYPCONSTRAINTLISTARG: HYPCONSTRAINT_NIL ([])
+		    | LP HYPCONSTRAINTLIST RP (HYPCONSTRAINTLIST)
+
+QHCL: QHCL_BASE HYPCONSTRAINTLISTARG ([], HYPCONSTRAINTLISTARG)
+    | QHCL_ALL LP LSQ ID COLON SORT RSQ QHCLARG (let val (L, hcl) = QHCLARG 
+						 in
+						     ((Terms.Bvar ID, SORT) :: L, hcl)
+						 end)
+    | LP QHCL RP (QHCL)
+
+QHCLARG: LP QHCL RP (QHCL)
+						     
+QHCL_PROCESSED: QHCLARG (ParserCommon.transform_qhcl_bvs QHCLARG)
+
+PROCAP: PROCAP_LIT TERMARG TERMARG TERMARG QHCL_PROCESSED STATELISTARG DOT MAC 
+	 ((TERMARG1, TERMARG2, TERMARG3, QHCL_PROCESSED, STATELISTARG, Option.SOME (ParserCommon.extract_mac MAC)))
+
+PARAMS: PARAMETERS_LIT PARAM_LIST (PARAM_LIST)
+	 
+PARAM_LIST: ([])
+	  | LSQ ID COLON SORT RSQ PARAM_LIST ((Terms.Varbind ID, SORT) :: PARAM_LIST)
+
+QPROCAP: PROCAP (([], PROCAP))
+       | PARAMS PROCAP (ParserCommon.transform_qprocap_bvs (PARAMS,PROCAP))
+
+SUBSTITUTION: ([])
+	    | ID TERMARG SUBSTITUTION ((Terms.Varbind ID, TERMARG) :: SUBSTITUTION)

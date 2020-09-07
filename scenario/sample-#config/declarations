@@ -1,0 +1,16 @@
+bgadmin: term principal.
+ciahr: term principal.
+polyadmin: term principal.
+oca: term principal.
+
+level: sort.
+confidential: term level.
+secret: term level.
+topsecret: term level.
+
+employee: term principal -> pred.
+level_file: term file -> term level -> pred.
+level_individual: term principal -> term level -> pred.
+below: term level -> term level -> pred.
+poly: term principal -> pred.
+bg: term principal -> term level -> pred.

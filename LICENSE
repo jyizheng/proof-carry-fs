@@ -1,0 +1,17 @@
+Source files in this code have different licenses, shown in the
+respective files. All those created by me, Deepak Garg, are under the
+MIT license. You are free to use the files individually under the
+terms of their respective licenses. All files (except binaries)
+without explicit licenses are in public domain, free from any
+copyright and license.
+
+The code as a whole, and any binaries created from it, are under GNU
+General Public License version 2 or at your option any later
+version. This is due to a dependency on the source file
+nPatriciaTrie.h (not created by me) which is under that license. The
+text of the GNU General Public Licenses may be found at:
+http://www.gnu.org/copyleft/gpl.html
+
+In addition, I allow you to link the source code against the OpenSSL
+library, and any other standard libraries available on your operating
+system. (This permission is necessary to create the binaries).

@@ -1,0 +1,49 @@
+# A sample pcfs configuration file. Do not use the same file for your
+# system (in particular change the key)
+# Lines beginning with # are comments. Change the attributes below to
+# suit your needs. You can also reorder the attributes.
+
+# File where logs are written. Put it on a partition with a lot of space
+LOG_FILE /tmp/pcfs-log
+
+# A directory for storing temporary files. 
+TEMP_DIR /tmp
+
+# UID of admin. admin is the person who signs off on all access.
+ADMIN_UID 1001
+
+# UID of system. system is the person who verifies proofs and writes procaps.
+SYSTEM_UID 1002
+
+# Size of log buffer in KB. This will be held in memory.
+# If you do set the option NO_LOG_COMMIT, the log is flushed to disk after each opertion.
+# In that case, you can keep this value small. If you do not set NO_LOG_COMMIT, the log
+# is circularly overwritten in memory and committed on unmount. So allocate a large log.
+# The value below makes a 32 KB log buffer, which good if NO_LOG_COMMIT is not set.
+LOG_SIZE 32
+
+# Number of entries in procap cache. Suggested range is 20 to 100
+CACHE_SIZE 100
+
+
+# Optional flags. Flags are boolean. Values written after them are ignored.
+
+
+# Uncomment this to prevent the log from being committed in every fs operation.
+# This will slow down the fs but will ensure that logs are not lost in a crash.
+NO_LOG_COMMIT
+
+# Comment this to force a permission check and log entry in each read() and write()
+NO_DATACHECK
+
+# Uncomment this to prevent generation of default procaps 
+# NO_INSERT_AUTO_PROCAPS
+
+# Uncomment this to prevent insertion of attribute "user.#pcfs.newfile" = 1
+# on every newly created file/directory. If uncommented, automatically
+# generated procaps will not contain a check for this attribute either.
+NO_INSERT_ATTR_NEWFILE
+
+# Uncomment this to prevent automatic removal of procaps
+# NO_REMOVE_AUTO_PROCAPS
+

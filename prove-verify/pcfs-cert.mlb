@@ -1,0 +1,38 @@
+      $(SML_LIB)/basis/basis.mlb
+      $(SML_LIB)/mlyacc-lib/mlyacc-lib.mlb
+      $(SML_LIB)/basis/pervasive.mlb
+      $(SML_LIB)/smlnj-lib/Util/smlnj-lib.mlb
+      $(SML_LIB)/basis/mlton.mlb
+      
+      xattr-c-wrap.sml
+      crypto-c-wrap.sml
+
+      sorts.sml
+      terms.sml
+      constraints.sml
+      states.sml
+      exps.sml
+      props.sml
+      proofs.sml
+      declarations.sml
+      procaps.sml
+
+      tc.sml
+
+      parsercommon.sml
+      bl-grm.grm.sig
+      bl-lex.lex.sml
+      bl-grm.grm.sml
+      parser.sml
+      
+      certs.sml
+      keymaps.sml
+      xml-common.sml
+      xml-grm.grm.sig
+      xml-lex.lex.sml
+      xml-grm.grm.sml
+      xml-parser.sml
+
+      certs-pcfs.sml
+
+      pcfs-cert.sml

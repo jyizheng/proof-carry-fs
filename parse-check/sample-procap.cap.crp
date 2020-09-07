@@ -1,0 +1,50 @@
+procap 
+	
+       (prim_int2principal 500)				%% Beneficiary (sort: principal)
+       (prim_str2file "/usr0/dg/temp/abc.txt") 	%% Name of file/dir allowed (sort: file)
+       write	    				%% Permission given (sort: perm)
+	
+
+%% Constraints
+       (qhcl_all                                
+          ([a:term time] qhcl_all 
+	     ([b:term time] qhcl_all 
+	        ([c:term principal] qhcl_base
+                   (hypconstraint_cons
+                      (hypconstraint_ 
+                         (constraint_cons (stronger c (prim_int2principal 501))
+                            (constraint_cons (stronger (prim_int2principal 500) c)
+                               constraint_nil))
+                         (stronger (prim_int2principal 500) (prim_int2principal 501)))
+                      (hypconstraint_cons
+                         (hypconstraint_
+			    (constraint_cons (leq (prim_date2time 2008:12:31:00:03:45) a)
+                               (constraint_cons (leq a b)
+                                  (constraint_cons (leq b ctime) 
+                                     constraint_nil)))
+                            (leq (prim_date2time 2008:12:31) ctime))
+                         hypconstraint_nil))))))
+                  
+%% State predicates
+(state_cons
+  (owner (prim_str2file "/usr0/dg/temp/abc.txt") (prim_int2principal 501))
+(state_cons
+  (has_xattr (prim_str2file "/usr0/dg/temp/abc.txt") "level" secret)
+(state_cons
+  (member (prim_int2principal 500) dg@mygroup)
+state_nil)))
+
+. %% This '.' is very important
+
+(* List of revocations has been removed, since the verifier must check
+   it and add more constraints on ctime to ensure that the procap is
+   valid only for a short period of time (say 1 day).  *)
+
+%{ We may add other forms of conditions later %}
+
+/* MAC taken over the text starting at the first non-white character
+of the file and ending at the last '.' in the file (both inclusive),
+including comments and whitespace. 160 bit HMAC using SHA1, written in
+hex (total 40 hex digits).  */
+#
+4a6cd6f9a48c4bcd78d572a700d942267ce4ef37

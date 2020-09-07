@@ -1,0 +1,588 @@
+This document contains installation instructions for PCFS, and a
+tutorial that runs a complete access control scenario. We start by
+describing briefly how PCFS is mounted and what the file system's
+organization is.
+
+----------------------------------------------------------------------
+
+MOUNTING PCFS
+
+PCFS is mounted using the following command:
+
+$> sudo pcfs-main /.pcfs /pcfs
+
+Here /.pcfs is an existing directory in an existing file system (e.g.,
+ext3) and /pcfs is an empty directory. This command starts the PCFS
+kernel handler. Any subsequent file system call to /pcfs/foo/bar will
+perform the corresponding operation on /.pcfs/foo/bar, except that the
+PCFS access checks will be made first. For security purposes, it is
+advisable to turn off all permissions on /.pcfs in the ext3 file system
+and give its ownership to root.
+
+------------------------------------------------------------------------
+
+Within /pcfs, there is a special directory called /pcfs/#config which
+contains configuration data (including the procaps) and is specially
+protected by PCFS using hard-coded checks (not dependent on
+procaps). Some of the files and subdirectories in this /pcfs/#config
+are listed below:
+
+- /pcfs/#config/config-file: This file contains configuration options
+including the uids of two special principals: admin and
+pcfssystem. admin is the principal who has ultimate authority on
+access (in the logic), whereas pcfssytem is the only principal who
+gets access to the shared key needed to sign the procaps. Hence the
+proof verifier must run with the uid of pcfssytem; this is done by
+giving ownership of the pcfs-verify binary to pcfssystem, and marking
+it with a setuid bit.
+
+config-file is readable by anyone but only pcfssystem can modify it.
+
+- /pcfs/#config/shared-key: This file contains the shared key needed
+to sign the procaps. It can be read and written only by pcfssystem.
+
+- /pcfs/#config/ca-pubkey.pem: This file contains the public key of
+  the certifying authority (CA). The CA creates certificates that map
+  other public keys to their owning principals using its private
+  key. These certificates are verified with the public key in this
+  file. All users can read this file but only pcfssystem can change
+  it.
+
+- /pcfs/#config/declarations: This file contains the declarations of
+  site specific sorts, predicates, and constraints. (Only type
+  declarations, not verification procedures). All users can read the
+  file, but only pcfssystem can change it.
+
+- /pcfs/#config/procaps: This directory contains the procaps. Its
+  structure is given below. In general, pcfssystem has full access to
+  this directory; other users get access to only the subdirectories
+  which contain procaps relevant to them.
+
+--------------------------------------------------------------------------
+
+PROCAP STORE
+
+Procaps are stored inside /pcfs/#config/procaps. A procap authorizes a
+right which is triple <k,f,n> where k is a user id, f is a file or
+directory name (represented as a pathname relative to /pcfs; /foo/bar
+refers to the file /pcfs/foo/bar), and n is a permission (read, write,
+execute, identity, or govern). 
+
+- There can be at most one procap that authorizes a right <k,f,n>
+
+- The procap authorizing <k,f,n> is stored in the file
+  /pcfs/#config/procaps/<k>/<f>.perm.<n>
+
+Within the procap store, the user <k> gets access only to
+/pcfs/#config/procaps/<k>/ (and all its substructure), but NOT to
+/pcfs/#config/procaps/<k'>/ for any different k'.
+
+----------------------------------------------------------------------------
+
+SOURCE AND OTHER DEPENDENCIES
+
+PCFS currently works only on Linux. Before trying to install PCFS,
+please make sure you have the following:
+
+- Fuse kernel module and development headers (Fuse is standard in all
+Linux kernels after 2009). Available at: http://fuse.sourceforge.net/
+
+- OpenSSL, both command line tools like 'openssl' and development
+  libraries
+
+- The program 'make'
+
+- g++ and gcc
+
+- Mlton compiler for SML. Available at http://mlton.org/. Please note
+  that as of this writing, the last stable Mlton release (numbered
+  20070826) has a bug in the foreign function interface. This bug must
+  be patched before PCFS is compiled. The bug is fixed by revision
+  5999 available at the bottom of page: http://mlton.org/Bugs20070826
+
+
+----------------------------------------------------------------------------
+
+INSTALLING PCFS
+
+Untar the PCFS source. Let us say that the root directory of the
+source code is <src>. In <src>, run the command:
+
+$> ./compile.sh
+
+You don't have to be the machine's root to run this command. This will
+compile all the source code. The executables created are:
+
+<src>/pcfs-main   -- the program to mount PCFS
+<src>/prove-verify/pcfs-search -- the program for proof search
+<src>/prove-verify/pcfs-verify -- the program to verify proofs and generate procaps
+<src>/prove-verify/pcfs-qprocap -- the program to inject procaps
+<src>/prove-verify/pcfs-genkey.sh -- the shell script to generate keys
+<src>/prove-verify/pcfs-cert -- the program to sign and verify certificates
+
+Copy all these 6 executables into a place where they will be
+accessible on the search PATH to all users. You can also invoke them
+with full path names if you wish; change the commands in this tutorial
+accordingly.
+
+Next create two users called admin and pcfssystem (the login names are
+irrelevant; only uids are important but we will continue to use these
+names for illustration). We will assume here that their IDS are 1001
+and 1002 respectuively.
+
+VERY IMPORTANT: Now go to whereever the 6 executables created by
+compilation are stored, change the owner of the executable pcfs-verify
+and pcfs-qprocap to pcfssystem, and mark their setuid bits:
+
+$> sudo chown pcfssystem:root pcfs-verify
+$> sudo chown pcfssystem:root pcfs-qprocap
+$> sudo chmod u+s pcfs-verify
+$> sudo chmod u+s pcfs-qprocap
+
+This will ensure that pcfs-verify and pcfs-qprocap run with uid of
+pcfssystem, which will give them access to procaps.
+
+To set up the file system, first pick a directory on the ext3 file
+system where the data will be stored. Let us assume that /.pcfs is
+chosen. Now copy the contents of the sample #config/ directory (the
+sample #config directory is <src>/scenario/sample-#config/) to
+/.pcfs/#config/. Set the ownership of /.pcfs to root and turn off all
+access on it.
+
+$> sudo chown root:root /.pcfs
+$> sudo chmod a-r /.pcfs
+$> sudo chmod a-w /.pcfs
+$> sudo chmod a-x /.pcfs
+
+VERY IMPORTANT: As root, open the file /.pcfs/#config/config-file and
+set the fields ADMIN_UID and SYSTEM_UID to the user ids of admin and
+pcfssystem respectively.
+
+Next generate the CA's private and public keys. For this run the
+script pcfs-genkey.sh as follows:
+
+$> pcfs-genkey.sh ca
+
+This will generate two files ca-priv.pem (containing a new private
+key) and ca-pub.pem (containing the corresponding public key). As
+root, replace the file /.pcfs/#config/ca-pubkey.pem with ca-pub.pem
+and give the file ca-priv.pem to the user who will act as CA (In this
+example, we will just assume that /you/ do the work of all
+administrators including the CA).
+
+Change the file /.pcfs/#config/declarations if you want to; the existing
+file will work with the example here.
+
+You may also want to change the shared key in
+/.pcfs/#config/shared-key. This is highly recommended but not
+necessary for following this tutorial. (If you do change it, it must
+be exactly 40 hex digits).
+
+At this point PCFS is set up. Congratulations!
+
+----------------------------------------------------------------------------
+
+MOUNT THE FILESYSTEM
+
+Find an empty directory (/pcfs in this example) where you want to
+mount PCFS. Run the command
+
+$> sudo pcfs-main /.pcfs /pcfs
+
+The program will prompt you to check if you are certain you want to
+mount PCFS. Say 'yes' (without the quotes). The PCFS server will start
+running in the terminal. Let it run. Perform the remaining steps of
+this example in a new terminal.
+
+-----------------------------------------------------------------------------
+
+POLICY EXAMPLE -- CREATE AND CERTIFY THE KEYS
+
+
+Now we work through an actual policy example that requires four
+administrators (bgadmin, ciahr, oca, polyadmin) in addition to admin
+and loca.
+
+The first thing to do is to create public and private keys for all
+these administrators. In practice, every administrator will perform
+this step separately in their own accounts. Here we just assume that
+one user (you!) is acting for all these administrators (and admin and
+loca). To generate the public and private keys for admin, use the
+command:
+
+$> pcfs-genkey.sh admin
+
+As in the case of the CA, this will generate the files admin-priv.pem
+and admin-pub.pem containing a new pair of private and public keys
+respectively. Repeat this step for all administrators, including loca:
+
+$> pcfs-genkey.sh loca
+$> pcfs-genkey.sh bgadmin
+$> pcfs-genkey.sh ciahr
+$> pcfs-genkey.sh oca
+$> pcfs-genkey.sh polyadmin
+
+The next step is to certify all public keys using the key of the
+CA. (In practice, this step is performed by the CA). For this, use the
+tool pcfs-cert. For example, to create a certificate which maps the
+key of the admin to admin-pub.pem, type the command:
+
+$> pcfs-cert -signkey -o ca-priv.pem admin-pub.pem -u 1001 2007:01:01 \
+2020:12:31 > admin-key.ct
+
+The option -signkey means that a key is being certified (the other
+possibility -signpolicy is used to sign logical formulas later in this
+tutorial). -o is an optional switch which means that the ASCII
+rendering of the content should be included as a comment inside the
+certificate (the actual content is written in base64
+encoding). ca-priv.pem contains the private key of the CA (we
+generated this file earlier). admin-pub.pem contains the public key of
+admin which we just generated.
+
+(-u 1001) indicates that the certificate should bind the public key to
+user id 1001. The other possibility here is to write down a symbolic
+name for a principal, which we do in later commands. However, admin is
+a special principal whose key must be bound to the uid (remember, we
+wrote the uid in /.pcfs/#config/config-file). 2007:01:01 and 2020:12:31
+are the beginning and end dates of the validity of the
+certificate. admin-key.ct is the output file where the certificate is
+stored (if you don't redirect, the output will go to STDOUT).
+
+The resulting certificate admin-key.ct binds the admin's public key to
+uid 1001. This can be distributed to users, who can then use it for
+proof verification.
+
+Repeat the above step for different administrators.
+
+$> pcfs-cert -signkey -o ca-priv.pem loca-pub.pem loca 2007:01:01 \
+2020:12:31 > loca-key.ct
+
+$> pcfs-cert -signkey -o ca-priv.pem bgadmin-pub.pem bgadmin 2007:01:01 \
+2020:12:31 > bgadmin-key.ct
+
+$> pcfs-cert -signkey -o ca-priv.pem ciahr-pub.pem ciahr 2007:01:01 \
+2020:12:31 > ciahr-key.ct
+
+$> pcfs-cert -signkey -o ca-priv.pem oca-pub.pem oca 2007:01:01 \
+2020:12:31 > oca-key.ct
+
+$> pcfs-cert -signkey -o ca-priv.pem polyadmin-pub.pem polyadmin 2007:01:01 \
+2020:12:31 > polyadmin-key.ct
+
+Note that for these administrators, we bind the keys to symbolic
+names. These (with the exception of loca), must be declared in the
+file /.pcfs/#config/declarations (for this example, they are already
+in the sample declaration file).
+
+Finally, concatenate all the certificates to a single one to
+distribute to users:
+
+$> cat *.ct > certs-keys.ct
+
+-----------------------------------------------------------------------------
+
+POLICY EXAMPLE -- CREATE AND CERTIFY POLICIES
+
+We now create a policy and sign it. In this example, we will give a
+user "alice" access to the file /pcfs/war.txt (on the underlying ext3
+file system, the file will be /.pcfs/war.txt).
+
+- First create a user named alice (the name is irrelevant, as
+  permissions are tied to uids, but we use the name to refer to the
+  principal in this example). Get its uid. Here we'll assume the uid
+  is 1003.
+
+- Now, as root, go to /.pcfs and create a file war.txt. Put any content
+  you like in it. If you wish to check that the file is visible in
+  PCFS, try to cat /pcfs/war.txt as root. This should print the
+  content of the file because PCFS allows the root all access. Also
+  check that you cannot cat /pcfs/war.txt as any other user (in
+  particular, you should not be able to do this as alice).
+
+Next, to give alice access, we will create policies. Each of the six
+administrators (admin, loca, bgadmin, ciahr, oca, polyadmin) will
+contribute some of the rules in the policy. To create rules, each
+administrator will write them in logical form in a text file, and
+convert the file to a certificate by signing them with his/her private
+key (which we have already generated). As an illustration, let's see
+how this works for admin.
+
+Create a file policy-admin.p and put the following content in it:
+
+
+%% BEGIN
+%% policies of admin
+cred/admin/may/read/_ : hyp_claims (prim_int2principal 1001)
+ (forall principal
+      ([u] forall file
+         ([f] forall level
+    ([l] forall level
+       ([l'] imp (says ciahr (atom (employee u)))
+(imp (says oca (atom (level_file f l)))
+   (imp (atom (level_individual u l'))
+        (imp (atom (below l l'))
+(atom (may u f read)))))))))) ninfty pinfty.
+
+cred/admin/may/execute/_ : hyp_claims (prim_int2principal 1001)
+ (forall principal
+    ([u] forall file
+       ([f] forall level
+  ([l] forall level
+     ([l'] imp (says ciahr (atom (employee u)))
+  (imp (says oca (atom (level_file f l)))
+     (imp (atom (level_individual u l'))
+      (imp (atom (below l l'))
+  (atom (may u f execute)))))))))) ninfty pinfty.
+
+cred/admin/level_indi/_ : hyp_claims (prim_int2principal 1001)
+     (forall principal
+      ([u] forall level
+         ([l] imp (says polyadmin (atom (poly u)))
+            (imp (says bgadmin (atom (bg u l)))
+      (atom (level_individual u l)))))) ninfty pinfty.
+
+%% END
+
+Lines beginning with % are comments. This file contains three
+rules. Each rule has a distinct name (/ is a valid character in an
+identifier). Further, each rule mentions the principal claiming
+(creating) it. It is necessary that all rules be claimed by the same
+principal ((prim_int2principal 1001), the uid of the admin, in this
+case), because only one principal can sign this file. If this
+condition is invalidated, an error will ensue when the file is signed.
+
+Next sign the file and convert it to a certificate.
+
+$> pcfs-cert -signpolicy -o admin-priv.pem policy-admin.p > cert-admin.ct
+
+(-signpolicy) means that we are trying to sign a policy. -o (as
+before) is optional. If included it causes the exact text of the
+policy (as written above) to be included as a comment in the
+certificate.
+
+admin-priv.pem contains the private key of the administrator, while
+policy-admin.p is the file we just created.
+
+The output is a certificate cert-admin.ct. This certificate is self
+contained. It contains the three policy rules above, the public key
+that signed the certificate (derived from the private key in
+admin-priv.pem), and the signature. 
+
+Repeat the above steps for the other administrators (the policy files
+*.p needed here come with this README -- see
+<src>/scenario/sample-policies/* -- but make sure you search and
+replace 1003 in each file by whatever uid alice has on your machine).
+
+
+$> pcfs-cert -signpolicy -o loca-priv.pem policy-loca.p > cert-loca.ct
+
+$> pcfs-cert -signpolicy -o bgadmin-priv.pem policy-bgadmin.p > cert-bgadmin.ct
+
+$> pcfs-cert -signpolicy -o ciahr-priv.pem policy-ciahr.p > cert-ciahr.ct
+
+$> pcfs-cert -signpolicy -o oca-priv.pem policy-oca.p > cert-oca.ct
+
+$> pcfs-cert -signpolicy -o polyadmin-priv.pem policy-polyadmin.p > cert-polyadmin.ct
+
+Once again, the certificates can be concatenated:
+
+$> cat cert-*.ct > certs-policies.ct
+
+The two certificates certs-keys.ct (created in the previous section)
+and certs-policies.ct (created by the last command above) are enough
+to generate and verify all proofs. Give these certificates to alice by
+copying them into her user account. 
+
+---------------------------------------------------------------------------
+
+CREATING AND VERIFYING PROOFS
+
+The objective now is to allow alice to cat /pcfs/war.txt. Log in (or
+su) as alice and cd to the directory where the two certificate files
+certs-keys.ct and certs-policies.ct were placed. If you have not
+already tried it, run the following command as alice, and make sure it
+gives you a permission DENIED.
+
+$alice> cat /pcfs/war.txt
+cat: /pcfs/war.txt: Permission denied       
+
+Next, alice must construct a procap to show that she can read the
+file. In fact she needs two proofs: one to read the file (read
+permission), and the other to stat the file (execute permission). The
+latter is needed for almost any operation on a file. We start with the
+read permission.
+
+------------------
+PROOF CONSTRUCTION
+------------------
+
+First, alice must construct a proof that the policies allow her
+read access. For this, use pcfs-search as follows:
+
+$alice> pcfs-search /pcfs 1003 "/war.txt" read 2009:01:01 2011:12:31 \
+-cert certs-keys.ct certs-policies.ct > proof_read
+
+Let's understand the parts of this command:
+
+/pcfs -- this is the path where PCFS is mounted. This path is used to
+read three things: declarations in /pcfs/#config/declarations, the
+CA's public key from /pcfs/#config/ca-pubkey.pem to check the
+certificates in certs-keys.ct, and the admin's uid from
+/pcfs/#config/config-file to determine the exact formula to prove
+(this formula is listed later).
+
+1003 -- this is the user id of alice (change it to suit your
+system). This (and the following four items) are needed to determine
+the formula to be proved
+
+"/war.txt" -- file on which permission is to be shown. The name is
+relativized to the mount point /pcfs
+
+read -- the permission needed
+
+2009:01:01 -- earliest point at which permission should be valid
+
+2011:12:31 -- latest point at which permission should be valid
+
+(-cert certs-keys.ct certs-policies.ct) -- list of certificates (both
+those that certify keys, and those that contain policies). 
+
+proof_read -- file to put the proof in. 
+
+
+The search tool will parse the policy rules from certs-policies.ct,
+type check them using declarations from /pcfs/#config/declarations,
+and find a proof which shows the following formula:
+
+((prim_int2principal 1001) says may (prim_int2principal 1003)
+"/war.txt" read) at 2009:01:01 2011:12:31
+
+Here 1001 is the uid of admin (read from /pcfs/#config/config-file),
+and 1003 is the uid given on the command line. Note that it is
+possible to give a different id, and use the tool to create proofs for
+some other user. 
+
+There are some variations possible in the command line options
+
+- Instead of giving the five options (1003 "/war.txt" read 2009:01:01
+  2011:12:31), one can write -prop A
+
+  where A is a BL proposition. Then the prover will prove this
+  specific proposition. 
+
+- Instead of giving certificates, the raw policy files can be given to
+  the prover. For example, -cert certs-keys.ct certs-policies.ct can
+  be replaced by: -raw ...  where ... lists all policy file (*.p in
+  the previous section).  This is perfectly fine because the proof
+  search tool is NOT ENFORCING the policy, nor is it trusted. So
+  signatures are unnecessary at this point.
+
+------------------
+PROOF VERIFICATION
+------------------
+
+Next alice must have the proof (in proof_read) verified and generate a
+procap. For this she must invoke the command line tool pcfs-verify. As
+opposed to pcfs-search, this tool is trusted. The trust is manifest in
+the fact that the tool runs with a set-uid bit which changes its
+effective uid to pcfssystem. This gives it access to the shared key in
+the file /pcfs/#config/shared-key, and lets it sign the procap it
+generates.
+
+$alice> pcfs-verify /pcfs proof_read 1003 "/war.txt" read -cert \ 
+certs-keys.ct certs-policies.ct > procap_read
+
+This command is very similar to pcfs-search. The only difference is
+that the proof is passed as the second argument, and the time range is
+not mentioned. The output is a procap which lets alice read "/war.txt"
+from 2009-2011 (this time is automatically extracted from the proof in
+proof_read). The tool makes the following checks:
+
+- It checks that all key certifications in the certificate files can
+  be verified using the CA's public key in /pcfs/#config/ca-pubkey.pem
+
+- It checks that all policy rules in certificate files are signed
+  using keys that have been certified by the CA (previous step), and
+  that the signing keys of rules map to principals who claim them.
+
+- It checks the logical structure of the proof in proof_read.
+
+As for the search tool, variations are allowed in the pcfs-verify command:
+
+- Instead of the options (1003 "/war.txt" read), -prop A can used to
+  check the proof against proposition A.
+
+- Instead of -cert, -raw can be used to provide policies directly. 
+
+Note that these variant options are for experiments only. If either of
+them is used, the tool will not generate a procap (due to obvious
+security breaches). Instead it will output only the conditions which
+must hold for the proof to be valid.
+
+
+----------------
+PROCAP INJECTION
+----------------
+
+Finally, alice must inject the procap (in procap_read) into PCFS'
+procap store. There are two ways to do this. The first is to use the
+tool pcfs-qprocap:
+
+$alice> pcfs-qprocap /pcfs procap_read -i
+
+/pcfs is the path to PCFS, procap_read contains the procap to be
+injected, and -i asks the command to inject the procap. 
+
+The other option is to do this manually. As described earlier, the
+procap needs to be placed at the location:
+/pcfs/#config/procaps/1003/war.txt.perm.read. Alice can do this
+manually using a cp command (the directory /pcfs/#config/procaps/1003
+must be created by pcfssystem or root).
+
+Note: pcfs-qprocap can also be used to substitute into parametric
+procaps (although pcfs-verify cannot create such procaps, the
+programming API can). This use is described at the end of this file.
+
+
+------- 
+ACCESS!  
+------- 
+
+At this point alice has read permission on /war.txt. She must repeat
+steps similar to the previous three steps to get execute permission as
+well:
+
+$alice> pcfs-search /pcfs 1003 "/war.txt" execute 2009:01:01 2011:12:31 \
+-cert certs-keys.ct certs-policies.ct > proof_execute
+
+$alice> pcfs-verify /pcfs proof_execute 1003 "/war.txt" execute -cert \ 
+certs-keys.ct certs-policies.ct > procap_execute
+
+$alice> pcfs-qprocap /pcfs procap_execute -i
+
+Finally, alice can cat the file she wanted:
+
+$alice> cat /pcfs/war.txt
+...
+
+This command should now succeed.
+
+
+--------------------------------------------------------------------
+
+ENDNOTE: Parametric procaps with pcfs-qprocap
+
+If you wish to substitute parameters for ground values in a parametric
+procap before injecting it, use the syntax:
+
+pcfs-qprocap /pcfs parametric-procap-file -subst substitution-file -i
+
+substituition-file provides the substitution. It has the format:
+
+id1  term1
+id2  term2
+...
+
+where id1, id2, ... are the parameters of the procap, and term1,
+term2, ... are their substitutions.
+

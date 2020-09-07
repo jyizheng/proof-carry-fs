@@ -1,0 +1,3 @@
+# The symmetric key shared with the verifier. This must be exactly 40
+# hex digits long
+aa00123456bb00123456cc00123456dd00123456

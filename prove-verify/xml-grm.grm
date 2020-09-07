@@ -1,0 +1,113 @@
+(* Used by the parser *)
+exception BadPubKeyFormat of string
+exception BadBase64 of string
+
+%%
+
+(*
+Copyright (c) <2008,2009> <Deepak Garg dg@cs.cmu.edu>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE. 
+*)
+
+
+%name XML 
+
+%pos int * int	
+	(* linenum * linepos *)
+
+%term START_CERT | START_KEYMAP | START_DATE | EOFMARK |
+      SIGN_OPEN | SIGN_CLOSE | ELEM_OPEN | ELEM_CLOSE | 
+      PUBKEY_OPEN | PUBKEY_CLOSE | DATA_OPEN | DATA_CLOSE | 
+      TYPE_OPEN | TYPE_CLOSE |
+      FROM_OPEN | FROM_CLOSE | TO_OPEN | TO_CLOSE | 
+      KEYMAP_OPEN | KEYMAP_CLOSE | SUBJECT_OPEN | SUBJECT_CLOSE |
+      HEADER_BEGIN_PUBKEY of string | HEADER_END_PUBKEY of string |
+      STR_VAL of string |
+      BASE64_COMPONENT of string |
+      BASE64_END of string |
+      PRIM_DATE of Time.time
+
+%nonterm CERT of Certs.cert
+       | ELEM of Certs.elem
+       | START of XMLCommon.parserResult
+       | DATA of string
+       | TYPE of Certs.str
+       | PUBKEY of Crypto.pubkey
+       | SIGN of string
+       | BASE64 of string
+       | PUBKEY_H of string
+       | KEYMAP of KeyMaps.keymap
+       | SUBJECT of KeyMaps.str
+       | FROM of Time.time
+       | TO of Time.time
+
+%noshift EOFMARK
+%eop EOFMARK
+%pure
+%nodefault
+%start START
+%verbose
+
+
+%%
+
+START: START_CERT CERT (XMLCommon.Cert CERT)
+     | START_KEYMAP KEYMAP (XMLCommon.KeyMap KEYMAP)
+     | START_DATE PRIM_DATE (XMLCommon.Date PRIM_DATE)
+
+CERT: ([])
+    | ELEM CERT (ELEM :: CERT)
+
+ELEM: ELEM_OPEN DATA TYPE PUBKEY SIGN ELEM_CLOSE ((DATA, TYPE, PUBKEY, SIGN))
+
+DATA: DATA_OPEN BASE64 DATA_CLOSE (case (Crypto.pemDecode BASE64) of
+				       NONE => raise BadBase64 BASE64
+				     | SOME s => s)
+
+TYPE: TYPE_OPEN STR_VAL TYPE_CLOSE (Certs.stringToStr STR_VAL)
+    
+PUBKEY: PUBKEY_OPEN PUBKEY_H PUBKEY_CLOSE (case (Crypto.stringToPubkey PUBKEY_H) of
+					       NONE => raise BadPubKeyFormat PUBKEY_H
+					     | SOME k => k)
+
+PUBKEY_H: HEADER_BEGIN_PUBKEY BASE64 HEADER_END_PUBKEY (HEADER_BEGIN_PUBKEY ^ "\n" ^ 
+							(Crypto.formatPem BASE64) ^ 
+							HEADER_END_PUBKEY ^ "\n")
+
+	| BASE64 ("-----BEGIN PUBLIC KEY-----\n" ^
+		  (Crypto.formatPem BASE64) ^ 
+		  "-----END PUBLIC KEY-----\n")
+
+SIGN: SIGN_OPEN BASE64 SIGN_CLOSE  (case (Crypto.pemDecode BASE64) of
+				       NONE => raise BadBase64 BASE64
+				     | SOME s => s)
+
+BASE64: BASE64_COMPONENT (BASE64_COMPONENT)
+      | BASE64_COMPONENT BASE64 (BASE64_COMPONENT ^ BASE64)
+      | BASE64_END (BASE64_END)
+
+
+KEYMAP: KEYMAP_OPEN SUBJECT PUBKEY FROM TO KEYMAP_CLOSE ((SUBJECT, PUBKEY, FROM, TO))
+
+SUBJECT: SUBJECT_OPEN STR_VAL SUBJECT_CLOSE (KeyMaps.stringToStr STR_VAL)
+
+FROM: FROM_OPEN PRIM_DATE FROM_CLOSE (PRIM_DATE)
+
+TO: TO_OPEN PRIM_DATE TO_CLOSE (PRIM_DATE)
